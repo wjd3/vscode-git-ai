@@ -1,15 +1,27 @@
 {
 	"name": "git-ai",
 	"displayName": "Git AI",
-	"description": "Generate git commit messages and branch names using AI based on git diff",
-	"version": "0.0.1",
+	"publisher": "wjd3",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/wjd3/vscode-git-ai.git"
+	},
+	"homepage": "https://github.com/wjd3/vscode-git-ai#readme",
+	"bugs": {
+		"url": "https://github.com/wjd3/vscode-git-ai/issues"
+	},
+	"description": "Generate commit messages and manage branches using AI",
+	"version": "0.1.0",
 	"engines": {
 		"vscode": "^1.86.0"
 	},
 	"categories": [
 		"AI",
-		"Snippets",
 		"Other"
+	],
+	"activationEvents": [
+		"onCommand:vscode-commit-ai.generateCommit",
+		"onCommand:vscode-commit-ai.createBranch"
 	],
 	"main": "./dist/extension.js",
 	"contributes": {
@@ -20,7 +32,7 @@
 			},
 			{
 				"command": "git-ai.createBranch",
-				"title": "Create New Git Branch"
+				"title": "Create New Git Branch with AI"
 			}
 		],
 		"configuration": {
@@ -51,6 +63,7 @@
 						"gpt-4o-mini",
 						"ollama"
 					],
+					"default": "gpt-4o-mini",
 					"description": "Preferred AI model"
 				},
 				"git-ai.ollamaModel": {
@@ -120,9 +133,8 @@
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
-		"compile": "tsc -p ./",
-		"watch": "tsc -watch -p ./",
-		"test": "jest"
+		"compile": "tsc -p ./ && cp package.json dist/",
+		"watch": "tsc -watch -p ./"
 	},
 	"dependencies": {
 		"@anthropic-ai/sdk": "^0.17.1",
@@ -132,8 +144,7 @@
 	"devDependencies": {
 		"@types/node": "^20.11.19",
 		"@types/vscode": "^1.86.0",
-		"typescript": "^5.3.3",
-		"jest": "^29.7.0",
-		"@types/jest": "^29.5.12"
+		"tslib": "^2.8.1",
+		"typescript": "^5.6.3"
 	}
 }

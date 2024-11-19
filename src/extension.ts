@@ -1,35 +1,103 @@
+// src/extension.ts
 import * as vscode from 'vscode'
 import { getGitDiff } from './utils/git'
 import { generateCommitMessage } from './utils/ai'
-import { formatBranchName } from './utils/git'
-import simpleGit from 'simple-git'
+import { generateBranchName } from './utils/branch'
+import { simpleGit } from 'simple-git'
 
 export function activate(context: vscode.ExtensionContext) {
-	// Add branch creation command
-	// Configuration commands
-	const setApiKey = vscode.commands.registerCommand('git-ai.setApiKey', async () => {
-		const provider = await vscode.window.showQuickPick(['Anthropic', 'OpenAI'], {
-			placeHolder: 'Select API provider'
-		})
+	// Register commit message generation command
+	const generateCommit = vscode.commands.registerCommand('git-ai.generateCommit', async () => {
+		try {
+			const diff = await getGitDiff()
+			if (!diff) {
+				vscode.window.showErrorMessage('No changes detected in git.')
+				return
+			}
 
-		if (!provider) return
+			const commitDetails = await generateCommitMessage(diff)
 
-		const key = await vscode.window.showInputBox({
-			password: true,
-			placeHolder: `Enter your ${provider} API key`,
-			ignoreFocusOut: true
-		})
+			if (commitDetails) {
+				await vscode.commands.executeCommand('workbench.view.scm')
+				await vscode.commands.executeCommand('git.stageAll')
 
-		if (!key) return
+				// Get the SCM input box
+				const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports
+				const git = gitExtension.getAPI(1)
 
-		const config = vscode.workspace.getConfiguration('git-ai')
-		const setting = provider.toLowerCase() === 'anthropic' ? 'anthropicApiKey' : 'openaiApiKey'
-		await config.update(setting, key, vscode.ConfigurationTarget.Global)
+				if (!git || git.repositories.length === 0) {
+					throw new Error('Git extension not found or no repositories')
+				}
 
-		vscode.window.showInformationMessage(`${provider} API key updated`)
+				const repository = git.repositories[0]
+
+				// Set both the commit name and message
+				repository.inputBox.value = commitDetails.message
+
+				const nameInput = repository.repository.getCommitTemplate()
+				if (nameInput) {
+					repository.inputBox.value = `${commitDetails.name}\n\n${commitDetails.message}`
+				} else {
+					repository.inputBox.value = commitDetails.message
+				}
+
+				console.log(commitDetails)
+			}
+		} catch (error) {
+			vscode.window.showErrorMessage(
+				`Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+			)
+		}
 	})
 
-	const changeModel = vscode.commands.registerCommand('git-ai.changeModel', async () => {
+	// Register branch creation command
+	const createBranch = vscode.commands.registerCommand('git-ai.createBranch', async () => {
+		try {
+			const useDescription = await vscode.window.showQuickPick(
+				['Use description', 'Use current changes'],
+				{
+					placeHolder: 'How would you like to generate the branch name?'
+				}
+			)
+
+			if (!useDescription) return
+
+			let branchName: string
+
+			if (useDescription === 'Use description') {
+				const description = await vscode.window.showInputBox({
+					placeHolder: 'Enter a description of the changes/feature',
+					prompt: 'Describe what this branch will be used for'
+				})
+
+				if (!description) return
+				branchName = await generateBranchName(description)
+			} else {
+				branchName = await generateBranchName()
+			}
+
+			// Create and checkout the branch
+			const workspaceFolders = vscode.workspace.workspaceFolders
+			if (!workspaceFolders) {
+				throw new Error('No workspace folder open')
+			}
+			if (!workspaceFolders[0]) {
+				throw new Error('No workspace folder open')
+			}
+
+			const git = simpleGit(workspaceFolders[0].uri.fsPath)
+			await git.checkoutLocalBranch(branchName)
+
+			vscode.window.showInformationMessage(`Created and switched to branch: ${branchName}`)
+		} catch (error) {
+			vscode.window.showErrorMessage(
+				`Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+			)
+		}
+	})
+
+	// Register model selection command
+	let changeModel = vscode.commands.registerCommand('git-ai.changeModel', async () => {
 		const config = vscode.workspace.getConfiguration('git-ai')
 		const currentModel = config.get<string>('preferredModel')
 
@@ -53,9 +121,7 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 		)
 
-		if (!model) {
-			return
-		}
+		if (!model) return
 
 		if (model.label === currentModel) {
 			vscode.window.showInformationMessage(`Model is already set to ${model.label}`)
@@ -66,165 +132,5 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage(`Preferred model changed to ${model.label}`)
 	})
 
-	const configureBranch = vscode.commands.registerCommand('git-ai.configureBranch', async () => {
-		const config = vscode.workspace.getConfiguration('git-ai')
-
-		const settings = [
-			'Require Ticket Number',
-			'Ticket Prefix',
-			'Default Branch Prefix',
-			'Custom Branch Prefixes'
-		]
-
-		const setting = await vscode.window.showQuickPick(settings, {
-			placeHolder: 'Select setting to configure'
-		})
-
-		if (!setting) return
-
-		switch (setting) {
-			case 'Require Ticket Number': {
-				const value = await vscode.window.showQuickPick(['Yes', 'No'], {
-					placeHolder: 'Require ticket number for branches?'
-				})
-				if (value) {
-					await config.update(
-						'requireTicketNumber',
-						value === 'Yes',
-						vscode.ConfigurationTarget.Global
-					)
-				}
-				break
-			}
-			case 'Ticket Prefix': {
-				const value = await vscode.window.showInputBox({
-					placeHolder: 'Enter ticket prefix (e.g., JIRA-)',
-					value: config.get('ticketPrefix') || ''
-				})
-				if (value) {
-					await config.update('ticketPrefix', value, vscode.ConfigurationTarget.Global)
-				}
-				break
-			}
-			case 'Default Branch Prefix': {
-				const prefixes = ['feature', 'bugfix', 'hotfix', 'release', 'docs']
-				const value = await vscode.window.showQuickPick(prefixes, {
-					placeHolder: 'Select default branch prefix'
-				})
-				if (value) {
-					await config.update('defaultBranchPrefix', value, vscode.ConfigurationTarget.Global)
-				}
-				break
-			}
-			case 'Custom Branch Prefixes': {
-				const current = config.get<string[]>('customBranchPrefixes', [])
-				const value = await vscode.window.showInputBox({
-					placeHolder: 'Enter comma-separated prefixes',
-					value: current.join(', ')
-				})
-				if (value) {
-					const prefixes = value
-						.split(',')
-						.map((p) => p.trim())
-						.filter(Boolean)
-					await config.update('customBranchPrefixes', prefixes, vscode.ConfigurationTarget.Global)
-				}
-				break
-			}
-		}
-	})
-
-	context.subscriptions.push(
-		setApiKey,
-		changeModel,
-		configureBranch,
-		vscode.commands.registerCommand('git-ai.createBranch', async () => {
-			try {
-				const branchTypes = ['feature', 'bugfix', 'hotfix', 'release', 'docs']
-
-				const branchType = await vscode.window.showQuickPick(branchTypes, {
-					placeHolder: 'Select branch type'
-				})
-
-				if (!branchType) return
-
-				const ticketNumber = await vscode.window.showInputBox({
-					placeHolder: 'Enter ticket number (optional)',
-					prompt: 'e.g., T-123'
-				})
-
-				const description = await vscode.window.showInputBox({
-					placeHolder: 'Enter branch description',
-					prompt: 'Use lowercase letters and hyphens, like this: my-cool-new-branch',
-					validateInput: (value: string) => {
-						if (!value) return 'Description is required'
-						if (!/^[a-z0-9-]+$/.test(value)) {
-							return 'Use only lowercase letters, numbers, and hyphens'
-						}
-						if (value.includes('--')) {
-							return 'Avoid consecutive hyphens'
-						}
-						if (value.endsWith('-')) {
-							return 'Branch name should not end with a hyphen'
-						}
-
-						return null
-					}
-				})
-
-				if (!description) {
-					return
-				}
-
-				const branchName = formatBranchName({
-					prefix: branchType,
-					ticketNumber,
-					description
-				})
-
-				const workspaceFolder = vscode.workspace.workspaceFolders?.[0]
-				if (!workspaceFolder) {
-					vscode.window.showErrorMessage('No workspace folder found')
-					return
-				}
-
-				const git = simpleGit(workspaceFolder.uri.fsPath)
-				await git.checkoutLocalBranch(branchName)
-
-				vscode.window.showInformationMessage(`Created and switched to branch: ${branchName}`)
-			} catch (error) {
-				vscode.window.showErrorMessage(
-					`Error creating branch: ${error instanceof Error ? error.message : 'Unknown error'}`
-				)
-			}
-		})
-	)
-	let disposable = vscode.commands.registerCommand('git-ai.generateCommit', async () => {
-		try {
-			const diff = await getGitDiff()
-			if (!diff) {
-				vscode.window.showErrorMessage('No changes detected in git.')
-				return
-			}
-
-			const message = await generateCommitMessage(diff)
-			if (message) {
-				const editor = vscode.window.activeTextEditor
-				if (editor) {
-					await vscode.commands.executeCommand('workbench.view.scm')
-					await vscode.commands.executeCommand('git.stageAll')
-					const scmInputBox = vscode.scm.inputBox
-					if (scmInputBox) {
-						scmInputBox.value = message
-					}
-				}
-			}
-		} catch (error) {
-			vscode.window.showErrorMessage(
-				`Error: ${error instanceof Error ? error.message : 'Unknown error'}`
-			)
-		}
-	})
-
-	context.subscriptions.push(disposable)
+	context.subscriptions.push(generateCommit, createBranch, changeModel)
 }

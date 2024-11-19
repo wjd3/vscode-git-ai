@@ -14,10 +14,50 @@ interface OllamaResponse {
 	response: string
 }
 
-export async function generateCommitMessage(diff: string): Promise<string> {
+interface AIConfig {
+	anthropicApiKey?: string
+	openaiApiKey?: string
+	ollamaHost?: string
+	preferredModel: string
+	ollamaModel: string
+}
+
+interface CommitDetails {
+	message: string
+	name: string
+}
+
+export async function generateFromAI(prompt: string): Promise<string> {
 	const config = getConfig()
 
-	const prompt = `Given the following git diff, generate a concise, descriptive commit message following the Conventional Commits 1.0.0 specification. Use one of these types: feat, fix, docs, style, refactor, perf, test, build, ci, chore. Include a scope if appropriate. Format should be:
+	switch (config.preferredModel) {
+		case 'claude-3.5-sonnet':
+		case 'claude-3-opus':
+		case 'claude-3-haiku':
+			return await generateAnthropicResponse(prompt, config)
+
+		case 'gpt-4o':
+		case 'gpt-4o-mini':
+			return await generateOpenAIResponse(prompt, config)
+
+		case 'ollama':
+			return await generateOllamaResponse(prompt, config)
+
+		default:
+			throw new Error('Invalid model selection')
+	}
+}
+
+export async function generateCommitMessage(diff: string): Promise<CommitDetails> {
+	const prompt = `Given the following git diff, generate two things:
+1. A concise commit name following conventional commits (type(optional-scope): brief-description)
+2. A detailed commit message following the Conventional Commits 1.0.0 specification.
+
+Use one of these types: feat, fix, docs, style, refactor, perf, test, build, ci, chore.
+Include a scope if appropriate.
+
+The commit name should be a single line.
+The commit message should be in this format:
 type(optional-scope): description
 
 [optional body]
@@ -27,27 +67,31 @@ type(optional-scope): description
 Include BREAKING CHANGE: footer or ! after type/scope for breaking changes.
 
 Git diff:
-
 ${diff}
 
-Generate a commit message that clearly describes the changes.`
+Respond in this exact format:
+COMMIT_NAME: type(scope): brief-description
+COMMIT_MESSAGE: 
+<full commit message here>
+`
 
-	switch (config.preferredModel) {
-		case 'claude-3.5-sonnet':
-		case 'claude-3-opus':
-		case 'claude-3-haiku':
-			return await generateAnthropicCommit(prompt, config)
-		case 'gpt-4o':
-		case 'gpt-4o-mini':
-			return await generateOpenAICommit(prompt, config)
-		case 'ollama':
-			return await generateOllamaCommit(prompt, config)
-		default:
-			throw new Error('No model selected.')
+	const response = await generateFromAI(prompt)
+	const parts = response.split('COMMIT_MESSAGE:')
+
+	if (parts.length !== 2) {
+		throw new Error('Invalid AI response format')
+	}
+
+	const name = parts[0]?.replace('COMMIT_NAME:', '').trim() || ''
+	const message = parts[1]?.replace(name, '').trim() || ''
+
+	return {
+		name,
+		message
 	}
 }
 
-async function generateAnthropicCommit(prompt: string, config: AIConfig): Promise<string> {
+async function generateAnthropicResponse(prompt: string, config: AIConfig): Promise<string> {
 	if (!config.anthropicApiKey) {
 		throw new Error('Anthropic API key not configured')
 	}
@@ -67,14 +111,15 @@ async function generateAnthropicCommit(prompt: string, config: AIConfig): Promis
 		]
 	})
 
-	const content = response.content[0]?.text
+	const content = response.content[0]
 	if (!content) {
-		throw new Error('No response content from Anthropic')
+		throw new Error('No response from Anthropic')
 	}
-	return content
+
+	return content.text.trim()
 }
 
-async function generateOpenAICommit(prompt: string, config: AIConfig): Promise<string> {
+async function generateOpenAIResponse(prompt: string, config: AIConfig): Promise<string> {
 	if (!config.openaiApiKey) {
 		throw new Error('OpenAI API key not configured')
 	}
@@ -84,7 +129,7 @@ async function generateOpenAICommit(prompt: string, config: AIConfig): Promise<s
 	})
 
 	const response = await openai.chat.completions.create({
-		model: config.preferredModel,
+		model: config.preferredModel === 'gpt-4o' ? 'gpt-4o' : 'gpt-4o-mini',
 		messages: [
 			{
 				role: 'user',
@@ -96,12 +141,13 @@ async function generateOpenAICommit(prompt: string, config: AIConfig): Promise<s
 
 	const content = response.choices[0]?.message?.content
 	if (!content) {
-		throw new Error('No response content from OpenAI')
+		throw new Error('No response from OpenAI')
 	}
-	return content
+
+	return content.trim()
 }
 
-async function generateOllamaCommit(prompt: string, config: AIConfig): Promise<string> {
+async function generateOllamaResponse(prompt: string, config: AIConfig): Promise<string> {
 	const response = await fetch(`${config.ollamaHost}/api/generate`, {
 		method: 'POST',
 		headers: {
@@ -118,16 +164,12 @@ async function generateOllamaCommit(prompt: string, config: AIConfig): Promise<s
 		throw new Error('Failed to communicate with Ollama')
 	}
 
-	const data = (await response.json()) as OllamaResponse
-	if (!data.response) {
-		throw new Error('Invalid response from Ollama')
-	}
-	return data.response
+	const data = await response.json()
+	return (data as OllamaResponse).response.trim()
 }
 
 function getConfig(): AIConfig {
 	const config = vscode.workspace.getConfiguration('git-ai')
-
 	return {
 		anthropicApiKey: config.get('anthropicApiKey'),
 		openaiApiKey: config.get('openaiApiKey'),

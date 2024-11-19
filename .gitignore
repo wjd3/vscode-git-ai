@@ -39,3 +39,5 @@ tmp/
 # Ignore all test files
 **/*.test.ts
 **/*.spec.ts
+# Extension files
+**/*.vsix
