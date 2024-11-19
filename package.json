@@ -1,0 +1,139 @@
+{
+	"name": "git-ai",
+	"displayName": "Git AI",
+	"description": "Generate git commit messages and branch names using AI based on git diff",
+	"version": "0.0.1",
+	"engines": {
+		"vscode": "^1.86.0"
+	},
+	"categories": [
+		"AI",
+		"Snippets",
+		"Other"
+	],
+	"main": "./dist/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "git-ai.generateCommit",
+				"title": "Generate Commit Message with AI"
+			},
+			{
+				"command": "git-ai.createBranch",
+				"title": "Create New Git Branch"
+			}
+		],
+		"configuration": {
+			"title": "Git AI",
+			"properties": {
+				"git-ai.anthropicApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "Anthropic API Key"
+				},
+				"git-ai.openaiApiKey": {
+					"type": "string",
+					"default": "",
+					"description": "OpenAI API Key"
+				},
+				"git-ai.ollamaHost": {
+					"type": "string",
+					"default": "http://localhost:11434",
+					"description": "Ollama host URL"
+				},
+				"git-ai.preferredModel": {
+					"type": "string",
+					"enum": [
+						"claude-3.5-sonnet",
+						"claude-3-opus",
+						"claude-3-haiku",
+						"gpt-4o",
+						"gpt-4o-mini",
+						"ollama"
+					],
+					"description": "Preferred AI model"
+				},
+				"git-ai.ollamaModel": {
+					"type": "string",
+					"default": "llama2",
+					"description": "Ollama model name"
+				},
+				"git-ai.commitMessageMaxLength": {
+					"type": "number",
+					"default": 72,
+					"description": "Maximum length for commit message title"
+				},
+				"git-ai.defaultCommitType": {
+					"type": "string",
+					"enum": [
+						"feat",
+						"fix",
+						"docs",
+						"style",
+						"refactor",
+						"perf",
+						"test",
+						"build",
+						"ci",
+						"chore"
+					],
+					"default": "feat",
+					"description": "Default commit type when type cannot be inferred"
+				},
+				"git-ai.requireTicketNumber": {
+					"type": "boolean",
+					"default": false,
+					"description": "Require ticket number for branch creation"
+				},
+				"git-ai.ticketPrefix": {
+					"type": "string",
+					"default": "T-",
+					"description": "Prefix for ticket numbers (e.g., JIRA-)"
+				},
+				"git-ai.defaultBranchPrefix": {
+					"type": "string",
+					"enum": [
+						"feature",
+						"bugfix",
+						"hotfix",
+						"release",
+						"docs"
+					],
+					"default": "feature",
+					"description": "Default branch prefix"
+				},
+				"git-ai.customBranchPrefixes": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"description": "Custom branch prefixes in addition to defaults"
+				},
+				"git-ai.debug": {
+					"type": "boolean",
+					"default": false,
+					"description": "Enable debug logging"
+				}
+			}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"test": "jest"
+	},
+	"dependencies": {
+		"@anthropic-ai/sdk": "^0.17.1",
+		"openai": "^4.28.0",
+		"simple-git": "^3.22.0"
+	},
+	"devDependencies": {
+		"@types/node": "^20.11.19",
+		"@types/vscode": "^1.86.0",
+		"typescript": "^5.3.3",
+		"jest": "^29.7.0",
+		"@types/jest": "^29.5.12"
+	}
+}

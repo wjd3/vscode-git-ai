@@ -1,0 +1,53 @@
+{
+	"compilerOptions": {
+		// Project Settings
+		"target": "ES2022",
+		"module": "commonjs",
+		"lib": ["ES2022"],
+		"outDir": "dist",
+		"rootDir": "src",
+		"sourceRoot": "src",
+
+		// Module Resolution
+		"moduleResolution": "node",
+		"baseUrl": "./",
+		"paths": {
+			"*": ["node_modules/*", "src/types/*"]
+		},
+		"resolveJsonModule": true,
+
+		// Type Checking
+		"strict": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"strictFunctionTypes": true,
+		"strictBindCallApply": true,
+		"strictPropertyInitialization": true,
+		"noImplicitThis": true,
+		"useUnknownInCatchVariables": true,
+		"alwaysStrict": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"exactOptionalPropertyTypes": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true,
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"noPropertyAccessFromIndexSignature": true,
+
+		// Emit Rules
+		"declaration": true,
+		"sourceMap": true,
+		"removeComments": false,
+		"preserveConstEnums": true,
+		"importHelpers": true,
+
+		// Advanced
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"esModuleInterop": true,
+		"allowSyntheticDefaultImports": true
+	},
+	"include": ["src/**/*"],
+	"exclude": ["node_modules", "dist", "**/__tests__/*", "**/__mocks__/*"]
+}
